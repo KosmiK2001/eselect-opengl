@@ -77,33 +77,29 @@ write_xorg_confd() {
 }
 
 # glvnd shim management (fork): legacy providers (nvidia, fglrx) ship files
-# named like glvnd's dispatch libraries (libGLX.so.0, libOpenGL.so.0). Those
-# must take over glvnd's SONAME slots, otherwise glvnd-linked applications
-# bypass the provider entirely (glvnd has no vendor lib for legacy drivers).
-GLVND_SHIMS="libGLX.so.0 libOpenGL.so.0"
+# named like glvnd's soname links (libGLX.so.0, libOpenGL.so.0). When such a
+# provider is selected, the system soname SYMLINK is re-pointed at the
+# provider shim, so glvnd-linked applications (mesa-utils etc) get the legacy
+# libGL's GLX/GL entrypoints. glvnd's versioned real files are never touched;
+# switching to a shimless provider (xorg-x11/mesa) restores the links.
+# GLVND_SHIMS are library base names: soname = ${base}.0, real file = ${base}.0.0.0
+GLVND_SHIMS="libGLX.so libOpenGL.so"
 
 glvnd_shims_apply() {
-    local impl=$1 libdir shim origdir sysf verf prov
+    local impl=$1 libdir shim soname verfile prov syslink
     for libdir in "${EROOT%/}"/usr/lib64 "${EROOT%/}"/usr/lib32; do
         [[ -d ${libdir} ]] || continue
-        origdir="${libdir}/.glvnd-original"
         for shim in ${GLVND_SHIMS}; do
-            prov="${libdir}/opengl/${impl}/lib/${shim}"
-            sysf="${libdir}/${shim}"
-            verf="${libdir}/${shim}.0.0.0"
-            if [[ -e ${prov} ]]; then
-                # provider carries the shim: park glvnd's original once and
-                # point the versioned system file at the provider
-                [[ -d ${origdir} ]] || mkdir -p "${origdir}"
-                if [[ -f ${verf} && ! -L ${verf} ]]; then
-                    mv -f "${verf}" "${origdir}/${shim}.0.0.0" || continue
-                fi
-                ln -sfn "${prov}" "${verf}"
-            else
-                # provider without shim: restore glvnd's original
-                if [[ -L ${verf} && -f ${origdir}/${shim}.0.0.0 ]]; then
-                    mv -f "${origdir}/${shim}.0.0.0" "${verf}"
-                fi
+            soname="${shim}.0"
+            verfile="${shim}.0.0.0"
+            prov="${libdir}/opengl/${impl}/lib/${soname}"
+            syslink="${libdir}/${soname}"
+            if [[ -e ${prov} && -L ${syslink} ]]; then
+                # provider carries the shim: hijack the soname symlink
+                ln -sfn "${prov}" "${syslink}"
+            elif [[ ! -e ${prov} && -L ${syslink} && -e ${libdir}/${verfile} ]]; then
+                # shimless provider: restore the glvnd layout
+                ln -sfn "${verfile}" "${syslink}"
             fi
         done
     done
