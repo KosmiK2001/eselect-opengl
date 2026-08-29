@@ -1,9 +1,12 @@
 [Unit]
-Description=eselect-opengl: watch glvnd soname links for provider overwrite
-
+Description=eselect-opengl: watch glvnd libdir for provider overwrite
+# Watching the directory: systemd path units follow symlinks, so changes to
+# the libGLX.so.0/libOpenGL.so.0 symlinks themselves are not seen. Directory
+# events fire on any package merge touching /usr/lib64; opengl-detect
+# `reapply` is idempotent (exits without writes when state matches), so this
+# cannot loop.
 [Path]
-PathChanged=/usr/lib64/libGLX.so.0
-PathChanged=/usr/lib64/libOpenGL.so.0
+PathChanged=/usr/lib64
 Unit=opengl-restore.service
 
 [Install]
