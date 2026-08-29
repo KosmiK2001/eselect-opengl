@@ -22,7 +22,7 @@ KEYWORDS="~amd64 ~x86"
 
 RDEPEND=">=app-admin/eselect-1.2.4
 	sys-apps/kmod
-	sys-apps/pciutils"'
+	sys-apps/pciutils"
 
 
 S="${WORKDIR}/${P}"
