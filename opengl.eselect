@@ -76,6 +76,39 @@ write_xorg_confd() {
 	echo 'EndSection'
 }
 
+# glvnd shim management (fork): legacy providers (nvidia, fglrx) ship files
+# named like glvnd's dispatch libraries (libGLX.so.0, libOpenGL.so.0). Those
+# must take over glvnd's SONAME slots, otherwise glvnd-linked applications
+# bypass the provider entirely (glvnd has no vendor lib for legacy drivers).
+GLVND_SHIMS="libGLX.so.0 libOpenGL.so.0"
+
+glvnd_shims_apply() {
+    local impl=$1 libdir shim origdir sysf verf prov
+    for libdir in "${EROOT%/}"/usr/lib64 "${EROOT%/}"/usr/lib32; do
+        [[ -d ${libdir} ]] || continue
+        origdir="${libdir}/.glvnd-original"
+        for shim in ${GLVND_SHIMS}; do
+            prov="${libdir}/opengl/${impl}/lib/${shim}"
+            sysf="${libdir}/${shim}"
+            verf="${libdir}/${shim}.0.0.0"
+            if [[ -e ${prov} ]]; then
+                # provider carries the shim: park glvnd's original once and
+                # point the versioned system file at the provider
+                [[ -d ${origdir} ]] || mkdir -p "${origdir}"
+                if [[ -f ${verf} && ! -L ${verf} ]]; then
+                    mv -f "${verf}" "${origdir}/${shim}.0.0.0" || continue
+                fi
+                ln -sfn "${prov}" "${verf}"
+            else
+                # provider without shim: restore glvnd's original
+                if [[ -L ${verf} && -f ${origdir}/${shim}.0.0.0 ]]; then
+                    mv -f "${origdir}/${shim}.0.0.0" "${verf}"
+                fi
+            fi
+        done
+    done
+}
+
 set_new_implementation() {
 	local gl_implem=$1
 	local avail_implems=$(get_implementations)
@@ -149,7 +182,10 @@ set_new_implementation() {
 	mkdir -p "${XORGD_FILE%/*}" || die
 	write_xorg_confd "${xorgmodpath[@]}" >${XORGD_FILE}
 
+	glvnd_shims_apply "${gl_implem}"
+
 	do_action env update &> /dev/null
+	[[ ${ROOT} == / ]] && ldconfig 2> /dev/null
 
 	echo " done"
 }

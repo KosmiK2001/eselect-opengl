@@ -20,7 +20,7 @@ have_provider() {
 set_provider() {
 	local impl=$1 current
 	current=$(eselect opengl show 2>/dev/null)
-	[[ ${current} == "${impl}" ]] && return 0
+	# always re-set: re-applies glvnd shims after libglvnd upgrades
 	if have_provider "${impl}"; then
 		echo "opengl-detect: switching OpenGL provider to ${impl}"
 		eselect opengl set "${impl}" >/dev/null
