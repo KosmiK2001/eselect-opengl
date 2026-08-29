@@ -1,0 +1,7 @@
+[Unit]
+Description=eselect-opengl: re-apply configured OpenGL provider (after glvnd/mesa updates)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/opengl-detect reapply

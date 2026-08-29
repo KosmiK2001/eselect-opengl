@@ -1,0 +1,10 @@
+[Unit]
+Description=eselect-opengl: watch glvnd soname links for provider overwrite
+
+[Path]
+PathChanged=/usr/lib64/libGLX.so.0
+PathChanged=/usr/lib64/libOpenGL.so.0
+Unit=opengl-restore.service
+
+[Install]
+WantedBy=multi-user.target

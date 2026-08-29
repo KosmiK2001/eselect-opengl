@@ -9,6 +9,11 @@
 #   nouveau / radeon / amdgpu / i915        -> xorg-x11 (glvnd mesa)
 #   nothing loaded                          -> xorg-x11 (sane default)
 
+load_profile() {
+	local f=/etc/env.d/000opengl
+	[[ -f ${f} ]] && sed -n 's/^OPENGL_PROFILE="\?\([^"]*\)"\?$/\1/p' "${f}"
+}
+
 have_provider() {
 	local impl=$1 libdir
 	for libdir in /usr/lib64 /usr/lib32 /usr/lib; do
@@ -17,10 +22,32 @@ have_provider() {
 	return 1
 }
 
+# true if the provider is already fully applied (profile + shim links),
+# so we can skip rewriting anything (keeps the .path trigger loop-free)
+provider_applied() {
+	local impl=$1 libdir shim soname prov link
+	[[ $(eselect opengl show 2>/dev/null) == "${impl}" ]] || return 1
+	for libdir in /usr/lib64 /usr/lib32; do
+		[[ -d ${libdir} ]] || continue
+		for shim in libGLX libOpenGL; do
+			soname="${shim}.so.0"
+			prov="${libdir}/opengl/${impl}/lib/${soname}"
+			link=$(readlink "${libdir}/${soname}" 2>/dev/null) || return 1
+			if [[ -e ${prov} ]]; then
+				[[ ${link} == "${prov}" ]] || return 1
+			else
+				[[ ${link} == "${libdir}/${soname}.0.0.0" && -e ${libdir}/${soname}.0.0.0 ]] || return 1
+			fi
+		done
+	done
+	return 0
+}
+
 set_provider() {
-	local impl=$1 current
-	current=$(eselect opengl show 2>/dev/null)
-	# always re-set: re-applies glvnd shims after libglvnd upgrades
+	local impl=$1
+	if provider_applied "${impl}"; then
+		return 0
+	fi
 	if have_provider "${impl}"; then
 		echo "opengl-detect: switching OpenGL provider to ${impl}"
 		eselect opengl set "${impl}" >/dev/null
