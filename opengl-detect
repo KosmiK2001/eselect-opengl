@@ -1,0 +1,49 @@
+#!/bin/bash
+# opengl-detect: set eselect-opengl provider to match the loaded GPU kernel
+# module, so that X starts with GL libraries consistent with the driver.
+# Intended to run once at boot, before any display manager.
+#
+# Module -> provider mapping:
+#   nvidia (proprietary, non-glvnd legacy)  -> nvidia
+#   fglrx (Catalyst)                        -> fglrx
+#   nouveau / radeon / amdgpu / i915        -> xorg-x11 (glvnd mesa)
+#   nothing loaded                          -> xorg-x11 (sane default)
+
+have_provider() {
+	local impl=$1 libdir
+	for libdir in /usr/lib64 /usr/lib32 /usr/lib; do
+		[[ -f ${libdir}/opengl/${impl}/lib/libGL.so.1 ]] && return 0
+	done
+	return 1
+}
+
+set_provider() {
+	local impl=$1 current
+	current=$(eselect opengl show 2>/dev/null)
+	[[ ${current} == "${impl}" ]] && return 0
+	if have_provider "${impl}"; then
+		echo "opengl-detect: switching OpenGL provider to ${impl}"
+		eselect opengl set "${impl}" >/dev/null
+	else
+		echo "opengl-detect: provider ${impl} not populated, keeping ${current:-xorg-x11}"
+	fi
+}
+
+detect_module() {
+	local mod
+	for mod in nvidia fglrx nouveau radeon amdgpu i915; do
+		if lsmod 2>/dev/null | grep -qw "${mod}"; then
+			echo "${mod}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+mod=$(detect_module) || mod=""
+
+case ${mod} in
+	nvidia)  set_provider nvidia ;;
+	fglrx)   set_provider fglrx ;;
+	*)       set_provider xorg-x11 ;;
+esac
