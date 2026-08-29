@@ -40,6 +40,25 @@ detect_module() {
 	return 1
 }
 
+# Single-GPU nvidia systems: nouveau may be holding the GPU for the boot
+# splash. Hand the GPU over to the proprietary module before X starts
+# (same flow the old gpu-switch-to-nvidia service performed).
+hand_gpu_to_nvidia() {
+	lspci -n 2>/dev/null | grep -qiE " 0300[.:] 10de:" || return 0
+	lsmod 2>/dev/null | grep -qw nouveau || return 0
+	modinfo nvidia >/dev/null 2>&1 || return 0
+
+	echo "opengl-detect: handing GPU over from nouveau to nvidia"
+	modprobe -r nouveau drm_ttm_helper ttm drm_gpuvm gpu_sched drm_exec \
+		drm_display_helper drm_kms_helper drm 2>/dev/null
+	sleep 1
+	lsmod 2>/dev/null | grep -qw nouveau && rmmod nouveau 2>/dev/null
+	sleep 1
+	modprobe nvidia 2>/dev/null
+}
+
+hand_gpu_to_nvidia
+
 mod=$(detect_module) || mod=""
 
 case ${mod} in
